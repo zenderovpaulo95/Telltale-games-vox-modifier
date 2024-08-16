@@ -56,7 +56,14 @@ namespace TTGVoxModifier
                 FileStream fs = new FileStream(fi.FullName, FileMode.Open);
                 BinaryReader br = new BinaryReader(fs);
                 byte[] header = br.ReadBytes(4);
+                if (Encoding.ASCII.GetString(header) == "ERTM") needDecrypt = false;
                 int count = br.ReadInt32();
+
+                /*for (int i = 0; i < count; i++)
+                {
+                    byte[] tmp = br.ReadBytes(8);
+                    tmp = br.ReadBytes(4);
+                }*/
 
                 for (int i = 0; i < count; i++)
                 {
@@ -86,8 +93,8 @@ namespace TTGVoxModifier
                     SpeexSharp.Native.SpeexBits bits;
                     Speex.BitsInit(&bits);
                     //SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Narrowband);
-                    SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
-                    //SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
+                    //SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
+                    SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
                     void* decState = Speex.DecoderInit(nativeMode);
                     int decFrame, Enhance;
                     Speex.DecoderCtl(decState, (int)GetCoderParameter.FrameSize, &decFrame);
@@ -149,7 +156,8 @@ namespace TTGVoxModifier
 
                 byte[] result = ms.ToArray();
 
-                NAudio.Wave.WaveFormat wavformat = new NAudio.Wave.WaveFormat(freq / 2, 16, noChnls);
+                //NAudio.Wave.WaveFormat wavformat = new NAudio.Wave.WaveFormat(freq / 2, 16, noChnls);
+                NAudio.Wave.WaveFormat wavformat = new NAudio.Wave.WaveFormat(freq, 16, noChnls);
                 WaveFileWriter wfw = new WaveFileWriter(outputFolder + Path.DirectorySeparatorChar + fi.Name.Remove(fi.Name.Length - 3, 3) + "wav", wavformat);
                 wfw.Write(result, 0, result.Length);
                 wfw.Close();
@@ -164,6 +172,217 @@ namespace TTGVoxModifier
             catch(Exception ex) 
             {
                 AddNewReport("Error in " + fi.Name + ": " + ex.Message);
+            }
+        }
+
+        private void Repack(FileInfo inputFI, string outputFile, bool needEncrypt, byte[] key)
+        {
+            try
+            {
+                FileStream fs = new FileStream(inputFI.FullName, FileMode.Open);
+                BinaryReader br = new BinaryReader(fs);
+                byte[] header = br.ReadBytes(4);
+                if (Encoding.ASCII.GetString(header) == "ERTM") needEncrypt = false;
+                int count = br.ReadInt32();
+
+                int[] lens = new int[count];
+                double[] crcs = new double[count];
+                string[] names = new string[count];
+                uint[] vals = new uint[count];
+
+                /*for (int i = 0; i < count; i++)
+                {
+                    crcs[i] = br.ReadDouble();
+                    //byte[] tmp = br.ReadBytes(8);
+                    //tmp = br.ReadBytes(4);
+                    vals[i] = br.ReadUInt32();
+                }*/
+
+                for (int i = 0; i < count; i++)
+                {
+                    lens[i] = br.ReadInt32();
+                    byte[] tmp = br.ReadBytes(lens[i]);
+                    names[i] = Encoding.ASCII.GetString(tmp);
+                    vals[i] = br.ReadUInt32();
+                    //int len = br.ReadInt32();
+                    //byte[] tmp = br.ReadBytes(len);
+                    //tmp = br.ReadBytes(4);
+                }
+
+                byte zero = br.ReadByte();
+                float time = br.ReadSingle();
+                int dataSize = br.ReadInt32();
+                int frameSize = br.ReadInt32();
+                int freq = br.ReadInt32();
+                int noChnls = br.ReadInt32();
+                int blSize = br.ReadInt32();
+                int blCount = br.ReadInt32();
+
+                br.Close();
+                fs.Close();
+
+                string fileName = inputFI.FullName.Remove(inputFI.FullName.Length - 3, 3) + "wav";
+                NAudio.Wave.AudioFileReader afr = new AudioFileReader(fileName);
+                int bytesPerSample = afr.WaveFormat.BitsPerSample / 8;
+                int noChanels = afr.WaveFormat.Channels;
+                noChnls = noChanels;
+                int bitsPerSample = afr.WaveFormat.BitsPerSample;
+                int sampleRate = afr.WaveFormat.SampleRate;
+                int sample = (int)afr.TotalTime.Milliseconds * sampleRate * noChanels / 1000;
+                time = (float)afr.TotalTime.TotalSeconds;
+                var type = afr.WaveFormat.Encoding;
+                //float freq = (float)sampleRate / (float)sample;
+                byte[] data = new byte[afr.Length];
+
+                int bytesRead = afr.ToWaveProvider16().Read(data, 0, data.Length);
+
+                //int sampleCount = data.Length * 8 / bitsPerSample;
+                int sampleCount = bytesRead * 8 / bitsPerSample;
+
+                afr.Close();
+
+                unsafe
+                {
+                    SpeexSharp.Native.SpeexBits bits;
+                    Speex.BitsInit(&bits);
+                    //SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
+                    SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
+                    //SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Narrowband);
+                    void* encState = Speex.EncoderInit(nativeMode);
+                    int encFrame, Enhance;
+                    Speex.EncoderCtl(encState, (int)GetCoderParameter.FrameSize, &encFrame);
+                    Enhance = 1;
+                    Speex.EncoderCtl(encState, (int)SetCoderParameter.Enh, &Enhance);
+                    int smpRate;
+                    int quality = 7;
+                    Speex.EncoderCtl(encState, (int)GetCoderParameter.SamplingRate, &smpRate);
+                    Speex.EncoderCtl(encState, (int)SetCoderParameter.Quality, &quality);
+
+                    int paddedLength = padSize(sampleCount, encFrame);
+                    short[] samples = new short[paddedLength];
+                    int offt = 0;
+                    for (int i = 0; i < sampleCount; i++)
+                    {
+                        samples[i] = BitConverter.ToInt16(data, offt);
+                        offt += 2;
+                    }
+
+                    MemoryStream speexStream = new MemoryStream();
+                    BinaryWriter bw = new BinaryWriter(speexStream);
+
+                    List<int> offset = new List<int>();
+                    int off = 0;
+                    offset.Add(off);
+                    string text = "Encoded with Speex via SpeexSharp";
+                    int len = Encoding.ASCII.GetBytes(text).Length;
+                    byte[] tmp = BitConverter.GetBytes(len);
+                    bw.Write(tmp);
+                    tmp = Encoding.ASCII.GetBytes(text);
+                    off += 4;
+                    bw.Write(tmp);
+                    off += len;
+
+                    // encode
+                    for (int i = 0; i < samples.Length; i += encFrame)
+                    {
+                        offset.Add(off);
+
+                        Speex.BitsReset(&bits);
+                        Span<short> inputSpan = new Span<short>(samples, i, encFrame);
+                        Span<byte> res = MemoryMarshal.Cast<short, byte>(inputSpan);
+                        var re = res.ToArray();
+
+                        byte[] bytes = new byte[encFrame];
+
+                        fixed (short* samplePtr = inputSpan)
+                        {
+                            Speex.EncodeInt(encState, samplePtr, &bits);
+
+                            if (noChnls == 2)
+                            {
+                                Speex.EncodeStereoInt(samplePtr, encFrame, &bits);
+                            }
+
+                            fixed (byte* b = bytes)
+                            {
+                                int tmpCount = Speex.BitsWrite(&bits, b, encFrame);
+                                off += tmpCount;
+                                tmp = new byte[tmpCount];
+                            }
+
+                            Array.Copy(bytes, 0, tmp, 0, tmp.Length);
+
+                            if((i % 64 == 0) && needEncrypt)
+                            {
+                                BlowFishCS.BlowFish encbl = new BlowFishCS.BlowFish(key, 2);
+                                tmp = encbl.Crypt_ECB(tmp, 2, true);
+                            }
+
+                            bw.Write(tmp);
+                        }
+                    }
+
+                    byte[] t = speexStream.ToArray();
+                    dataSize = t.Length;
+                    blCount = offset.Count;
+                    blSize = 8 + (4 * blCount);
+
+                    bw.Close();
+                    speexStream.Close();
+
+                    if (File.Exists(outputFile + Path.DirectorySeparatorChar + inputFI.Name)) File.Delete(outputFile + Path.DirectorySeparatorChar + inputFI.Name);
+                    fs = new FileStream(outputFile + Path.DirectorySeparatorChar + inputFI.Name, FileMode.CreateNew);
+
+                    fs.Write(header, 0, header.Length);
+                    tmp = BitConverter.GetBytes(count);
+                    fs.Write(tmp, 0, tmp.Length);
+                    
+                    for(int i = 0; i < count; i++)
+                    {
+                        tmp = BitConverter.GetBytes(lens[i]);
+                        fs.Write(tmp, 0, tmp.Length);
+                        tmp = Encoding.ASCII.GetBytes(names[i]);
+                        fs.Write(tmp, 0, tmp.Length);
+                        tmp = BitConverter.GetBytes(vals[i]);
+                        fs.Write(tmp, 0, tmp.Length);
+                    }
+
+                    tmp = new byte[1];
+                    tmp[0] = zero;
+                    fs.Write(tmp, 0, tmp.Length);
+
+                    tmp = BitConverter.GetBytes(time);
+                    fs.Write(tmp, 0, tmp.Length);
+                    tmp = BitConverter.GetBytes(dataSize);
+                    fs.Write(tmp, 0, tmp.Length);
+                    tmp = BitConverter.GetBytes(frameSize);
+                    fs.Write(tmp, 0, tmp.Length);
+                    tmp = BitConverter.GetBytes(freq);
+                    fs.Write(tmp, 0, tmp.Length);
+                    tmp = BitConverter.GetBytes(noChnls);
+                    fs.Write(tmp, 0, tmp.Length);
+                    tmp = BitConverter.GetBytes(blSize);
+                    fs.Write(tmp, 0, tmp.Length);
+                    tmp = BitConverter.GetBytes(blCount);
+                    fs.Write(tmp, 0, tmp.Length);
+
+                    for (int i = 0; i < offset.Count; i++)
+                    {
+                        byte[] c = BitConverter.GetBytes(offset[i]);
+                        fs.Write(c, 0, c.Length);
+                    }
+
+                    fs.Write(t, 0, t.Length);
+                    fs.Close();
+
+                    Speex.EncoderDestroy(encState);
+
+                    AddNewReport("File " + inputFI.Name + " successfully repacked");
+                }
+            }
+            catch (Exception ex) 
+            {
+                AddNewReport("Error with file " + inputFI.Name + ": " + ex.Message);
             }
         }
 
@@ -228,113 +447,21 @@ namespace TTGVoxModifier
 
         private void button2_Click(object sender, EventArgs e)
         {
-            NAudio.Wave.AudioFileReader afr = new AudioFileReader("C:\\Users\\User\\Desktop\\2324444.wav");
-            int bytesPerSample = afr.WaveFormat.BitsPerSample / 8;
-            int noChanels = afr.WaveFormat.Channels;
-            int bitsPerSample = afr.WaveFormat.BitsPerSample;
-            int sampleRate = afr.WaveFormat.SampleRate;
-            int sample = (int)afr.TotalTime.Milliseconds * sampleRate * noChanels / 1000;
-            float freq = (float)sampleRate / (float)sample;
-            byte[] data = new byte[afr.Length];
+            bool needDecrypt = needDecryptCB.Checked;
+            byte[] key = gamelist[gamelistCB.SelectedIndex].key;
 
-            int bytesRead = afr.ToWaveProvider16().Read(data, 0, data.Length);
-
-            int sampleCount = data.Length * 8 / bitsPerSample;
-
-            afr.Close();
-
-            unsafe
+            if (Directory.Exists(inputTB.Text) && Directory.Exists(outputTB.Text))
             {
-                SpeexSharp.Native.SpeexBits bits;
-                Speex.BitsInit(&bits);
-                //SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
-                SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
-                //SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Narrowband);
-                void* encState = Speex.EncoderInit(nativeMode);
-                int encFrame, Enhance;
-                Speex.EncoderCtl(encState, (int)GetCoderParameter.FrameSize, &encFrame);
-                Enhance = 1;
-                Speex.EncoderCtl(encState, (int)SetCoderParameter.Enh, &Enhance);
-                int smpRate;
-                int quality = 7;
-                Speex.EncoderCtl(encState, (int)GetCoderParameter.SamplingRate, &smpRate);
-                Speex.EncoderCtl(encState, (int)SetCoderParameter.Quality, &quality);
+                DirectoryInfo di = new DirectoryInfo(inputTB.Text);
+                FileInfo[] fi = di.GetFiles("*.vox", SearchOption.TopDirectoryOnly);
 
-                int paddedLength = padSize(sampleCount, encFrame);
-                short[] samples = new short[paddedLength];
-                int offt = 0;
-                for (int i = 0; i < sampleCount; i++)
+                for (int i = 0; i < fi.Length; i++)
                 {
-                    samples[i] = BitConverter.ToInt16(data, offt);
-                    offt += 2;
-                }
-
-                MemoryStream speexStream = new MemoryStream();
-                BinaryWriter bw = new BinaryWriter(speexStream);
-
-                List<int> offset = new List<int>();
-                int off = 0;
-                offset.Add(off);
-                string text = "Encoded with Speex via SpeexSharp";
-                int len = Encoding.ASCII.GetBytes(text).Length;
-                byte[] tmp = BitConverter.GetBytes(len);
-                bw.Write(tmp);
-                tmp = Encoding.ASCII.GetBytes(text);
-                off += 4;
-                bw.Write(tmp);
-                off += len;
-
-                // encode
-                for (int i = 0; i < samples.Length; i += encFrame)
-                {
-                    offset.Add(off);
-
-                    Speex.BitsReset(&bits);
-                    Span<short> inputSpan = new Span<short>(samples, i, encFrame);
-                    Span<byte> res = MemoryMarshal.Cast<short, byte>(inputSpan);
-                    var re = res.ToArray();
-
-                    byte[] bytes = new byte[encFrame];
-
-                    fixed (short* samplePtr = inputSpan)
+                    if (File.Exists(fi[i].FullName.Remove(fi[i].FullName.Length - 3, 3) + "wav"))
                     {
-                        Speex.EncodeInt(encState, samplePtr, &bits);
-
-                        if (noChanels == 2)
-                        {
-                            Speex.EncodeStereoInt(samplePtr, encFrame, &bits);
-                        }
-
-                        fixed (byte* b = bytes)
-                        {
-                            int count = Speex.BitsWrite(&bits, b, encFrame);
-                            off += count;
-                            tmp = new byte[count];
-                        }
-
-                        Array.Copy(bytes, 0, tmp, 0, tmp.Length);
-                        bw.Write(tmp);
+                        Repack(fi[i], outputTB.Text, needDecrypt, key);
                     }
                 }
-
-                byte[] t = speexStream.ToArray();
-
-                bw.Close();
-                speexStream.Close();
-
-                if (File.Exists("test.bin")) File.Delete("test.bin");
-                FileStream fs = new FileStream("test.bin", FileMode.CreateNew);
-
-                for (int i = 0; i < offset.Count; i++)
-                {
-                    byte[] c = BitConverter.GetBytes(offset[i]);
-                    fs.Write(c, 0, c.Length);
-                }
-
-                fs.Write(t, 0, t.Length);
-                fs.Close();
-
-                Speex.EncoderDestroy(encState);
             }
         }
 
