@@ -92,9 +92,27 @@ namespace TTGVoxModifier
                 {
                     SpeexSharp.Native.SpeexBits bits;
                     Speex.BitsInit(&bits);
-                    //SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Narrowband);
+
+                    SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Narrowband);
+
+                    switch(freq)
+                    {
+                        case 16000:
+                            if (noChnls == 2) freq /= 2;
+                            break;
+
+                        case 32000:
+                            nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
+                            if (noChnls == 2)
+                            {
+                                freq /= 2;
+                                nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
+                            }
+                            break;
+                    }
+
                     //SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
-                    SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
+                    //SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
                     void* decState = Speex.DecoderInit(nativeMode);
                     int decFrame, Enhance;
                     Speex.DecoderCtl(decState, (int)GetCoderParameter.FrameSize, &decFrame);
@@ -126,8 +144,11 @@ namespace TTGVoxModifier
                         Speex.BitsReset(&bits);
                         fixed (byte* b = bl)
                         {
-                            short[] vals = new short[decFrame * 2];
-                            //short[] vals = new short[decFrame];
+                            //short[] vals = new short[decFrame * 2];
+                            short[] vals = new short[decFrame];
+
+                            if (noChnls == 2) vals = new short[decFrame * 2];
+
                             Speex.BitsReadFrom(&bits, b, vals.Length);
                             int k = -1;
 
@@ -223,21 +244,20 @@ namespace TTGVoxModifier
 
                 string fileName = inputFI.FullName.Remove(inputFI.FullName.Length - 3, 3) + "wav";
                 NAudio.Wave.AudioFileReader afr = new AudioFileReader(fileName);
-                int bytesPerSample = afr.WaveFormat.BitsPerSample / 8;
-                int noChanels = afr.WaveFormat.Channels;
-                noChnls = noChanels;
+                noChnls = afr.WaveFormat.Channels;
                 int bitsPerSample = afr.WaveFormat.BitsPerSample;
                 int sampleRate = afr.WaveFormat.SampleRate;
-                int sample = (int)afr.TotalTime.Milliseconds * sampleRate * noChanels / 1000;
+                //int sample = (int)afr.TotalTime.Milliseconds * sampleRate * noChnls / 1000;
                 time = (float)afr.TotalTime.TotalSeconds;
-                var type = afr.WaveFormat.Encoding;
-                //float freq = (float)sampleRate / (float)sample;
+                //float freqtest = (float)sampleRate / (float)sample;
                 byte[] data = new byte[afr.Length];
 
                 int bytesRead = afr.ToWaveProvider16().Read(data, 0, data.Length);
+                //int bytesRead = afr.Read(data, 0, data.Length);
 
                 //int sampleCount = data.Length * 8 / bitsPerSample;
-                int sampleCount = bytesRead * 8 / bitsPerSample;
+                //int sampleCount = bytesRead * 8 / bitsPerSample;
+                //int sampleCount = newData.Length / 2;
 
                 afr.Close();
 
@@ -245,10 +265,33 @@ namespace TTGVoxModifier
                 {
                     SpeexSharp.Native.SpeexBits bits;
                     Speex.BitsInit(&bits);
+
+                    SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Narrowband);
+
+                    switch (sampleRate)
+                    {
+                        case 8000:
+                            if(noChnls == 2)
+                            {
+                                nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
+                            }
+                            break;
+
+                        case 16000:
+                            nativeMode = noChnls == 2 ? SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband) : SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
+                            break;
+
+                        case 32000:
+                            if (noChnls == 1) nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
+                            else throw new Exception("Please make either mono channel with 32000 samplerate or change samplerate to 16000");
+                            break;
+                    }
+
                     //SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
-                    SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
+                    //SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
                     //SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Narrowband);
                     void* encState = Speex.EncoderInit(nativeMode);
+                    
                     int encFrame, Enhance;
                     Speex.EncoderCtl(encState, (int)GetCoderParameter.FrameSize, &encFrame);
                     Enhance = 1;
@@ -258,10 +301,12 @@ namespace TTGVoxModifier
                     Speex.EncoderCtl(encState, (int)GetCoderParameter.SamplingRate, &smpRate);
                     Speex.EncoderCtl(encState, (int)SetCoderParameter.Quality, &quality);
 
-                    int paddedLength = padSize(sampleCount, encFrame);
+                    int paddedLength = padSize(bytesRead / 2, encFrame);
                     short[] samples = new short[paddedLength];
+                    //short[] samples = new short[sampleCount];
                     int offt = 0;
-                    for (int i = 0; i < sampleCount; i++)
+
+                    for (int i = 0; i < paddedLength; i++)
                     {
                         samples[i] = BitConverter.ToInt16(data, offt);
                         offt += 2;
@@ -289,8 +334,6 @@ namespace TTGVoxModifier
 
                         Speex.BitsReset(&bits);
                         Span<short> inputSpan = new Span<short>(samples, i, encFrame);
-                        Span<byte> res = MemoryMarshal.Cast<short, byte>(inputSpan);
-                        var re = res.ToArray();
 
                         byte[] bytes = new byte[encFrame];
 
@@ -355,9 +398,9 @@ namespace TTGVoxModifier
                     fs.Write(tmp, 0, tmp.Length);
                     tmp = BitConverter.GetBytes(dataSize);
                     fs.Write(tmp, 0, tmp.Length);
-                    tmp = BitConverter.GetBytes(frameSize);
+                    tmp = BitConverter.GetBytes(encFrame);
                     fs.Write(tmp, 0, tmp.Length);
-                    tmp = BitConverter.GetBytes(freq);
+                    tmp = BitConverter.GetBytes(smpRate);
                     fs.Write(tmp, 0, tmp.Length);
                     tmp = BitConverter.GetBytes(noChnls);
                     fs.Write(tmp, 0, tmp.Length);
