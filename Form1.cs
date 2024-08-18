@@ -363,7 +363,7 @@ namespace TTGVoxModifier
                             if((i % 64 == 0) && needEncrypt)
                             {
                                 BlowFishCS.BlowFish encbl = new BlowFishCS.BlowFish(key, 2);
-                                tmp = encbl.Crypt_ECB(tmp, 2, true);
+                                tmp = encbl.Crypt_ECB(tmp, 2, false);
                             }
 
                             bw.Write(tmp);
