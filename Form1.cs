@@ -279,6 +279,7 @@ namespace TTGVoxModifier
 
                         case 16000:
                             nativeMode = noChnls == 2 ? SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband) : SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
+                            //nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
                             break;
 
                         case 32000:
@@ -315,9 +316,12 @@ namespace TTGVoxModifier
                     MemoryStream speexStream = new MemoryStream();
                     BinaryWriter bw = new BinaryWriter(speexStream);
 
-                    List<int> offset = new List<int>();
+                    //List<int> offset = new List<int>();
+                    //blCount = (samples.Length / encFrame) / 2;
+                    blCount = samples.Length / encFrame;
+                    int[] offset = new int[blCount + 1];
                     int off = 0;
-                    offset.Add(off);
+                    offset[0] = off;
                     string text = "Encoded with Speex via SpeexSharp";
                     int len = Encoding.ASCII.GetBytes(text).Length;
                     byte[] tmp = BitConverter.GetBytes(len);
@@ -326,14 +330,15 @@ namespace TTGVoxModifier
                     off += 4;
                     bw.Write(tmp);
                     off += len;
+                    int encOff = 0;
 
                     // encode
-                    for (int i = 0; i < samples.Length; i += encFrame)
+                    for (int i = 1; i < blCount; i++)
                     {
-                        offset.Add(off);
+                        offset[i] = off;
 
                         Speex.BitsReset(&bits);
-                        Span<short> inputSpan = new Span<short>(samples, i, encFrame);
+                        Span<short> inputSpan = new Span<short>(samples, encOff, encFrame);
 
                         byte[] bytes = new byte[encFrame];
 
@@ -362,12 +367,12 @@ namespace TTGVoxModifier
                             }
 
                             bw.Write(tmp);
+                            encOff += encFrame;
                         }
                     }
 
                     byte[] t = speexStream.ToArray();
                     dataSize = t.Length;
-                    blCount = offset.Count;
                     blSize = 8 + (4 * blCount);
 
                     bw.Close();
@@ -379,7 +384,15 @@ namespace TTGVoxModifier
                     fs.Write(header, 0, header.Length);
                     tmp = BitConverter.GetBytes(count);
                     fs.Write(tmp, 0, tmp.Length);
-                    
+
+                    /*for (int i = 0; i < count; i++)
+                    {
+                        tmp = BitConverter.GetBytes(crcs[i]);
+                        fs.Write(tmp, 0, tmp.Length);
+                        tmp = BitConverter.GetBytes(vals[i]);
+                        fs.Write(tmp, 0, tmp.Length);
+                    }*/
+
                     for(int i = 0; i < count; i++)
                     {
                         tmp = BitConverter.GetBytes(lens[i]);
@@ -409,7 +422,7 @@ namespace TTGVoxModifier
                     tmp = BitConverter.GetBytes(blCount);
                     fs.Write(tmp, 0, tmp.Length);
 
-                    for (int i = 0; i < offset.Count; i++)
+                    for (int i = 0; i < blCount; i++)
                     {
                         byte[] c = BitConverter.GetBytes(offset[i]);
                         fs.Write(c, 0, c.Length);
