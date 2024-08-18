@@ -39,12 +39,12 @@
             listBox1 = new ListBox();
             gamelistCB = new ComboBox();
             label1 = new Label();
-            needDecryptCB = new CheckBox();
+            progressBar1 = new ProgressBar();
             SuspendLayout();
             // 
             // exportBtn
             // 
-            exportBtn.Location = new Point(182, 229);
+            exportBtn.Location = new Point(182, 187);
             exportBtn.Name = "exportBtn";
             exportBtn.Size = new Size(75, 23);
             exportBtn.TabIndex = 0;
@@ -54,7 +54,7 @@
             // 
             // importBtn
             // 
-            importBtn.Location = new Point(340, 229);
+            importBtn.Location = new Point(338, 187);
             importBtn.Name = "importBtn";
             importBtn.Size = new Size(75, 23);
             importBtn.TabIndex = 1;
@@ -141,22 +141,19 @@
             label1.TabIndex = 10;
             label1.Text = "Game's encryption key:";
             // 
-            // needDecryptCB
+            // progressBar1
             // 
-            needDecryptCB.AutoSize = true;
-            needDecryptCB.Location = new Point(523, 198);
-            needDecryptCB.Name = "needDecryptCB";
-            needDecryptCB.Size = new Size(97, 19);
-            needDecryptCB.TabIndex = 11;
-            needDecryptCB.Text = "Need decrypt";
-            needDecryptCB.UseVisualStyleBackColor = true;
+            progressBar1.Location = new Point(24, 229);
+            progressBar1.Name = "progressBar1";
+            progressBar1.Size = new Size(633, 23);
+            progressBar1.TabIndex = 11;
             // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(691, 567);
-            Controls.Add(needDecryptCB);
+            Controls.Add(progressBar1);
             Controls.Add(label1);
             Controls.Add(gamelistCB);
             Controls.Add(listBox1);
@@ -168,6 +165,7 @@
             Controls.Add(inputTB);
             Controls.Add(importBtn);
             Controls.Add(exportBtn);
+            MaximizeBox = false;
             Name = "Form1";
             Text = "Telltale's vox modifier";
             Load += Form1_Load;
@@ -188,6 +186,6 @@
         private ListBox listBox1;
         private ComboBox gamelistCB;
         private Label label1;
-        private CheckBox needDecryptCB;
+        private ProgressBar progressBar1;
     }
 }

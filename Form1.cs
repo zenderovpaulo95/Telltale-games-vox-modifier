@@ -49,14 +49,14 @@ namespace TTGVoxModifier
             }
         }
 
-        private void Unpack(FileInfo fi, string outputFolder, bool needDecrypt, byte[] key)
+        private void Unpack(FileInfo fi, string outputFolder, byte[] key)
         {
             try
             {
                 FileStream fs = new FileStream(fi.FullName, FileMode.Open);
                 BinaryReader br = new BinaryReader(fs);
                 byte[] header = br.ReadBytes(4);
-                if (Encoding.ASCII.GetString(header) == "ERTM") needDecrypt = false;
+                bool needDecrypt = Encoding.ASCII.GetString(header) != "ERTM";
                 int count = br.ReadInt32();
 
                 /*for (int i = 0; i < count; i++)
@@ -196,14 +196,14 @@ namespace TTGVoxModifier
             }
         }
 
-        private void Repack(FileInfo inputFI, string outputFile, bool needEncrypt, byte[] key)
+        private void Repack(FileInfo inputFI, string outputFile, byte[] key)
         {
             try
             {
                 FileStream fs = new FileStream(inputFI.FullName, FileMode.Open);
                 BinaryReader br = new BinaryReader(fs);
                 byte[] header = br.ReadBytes(4);
-                if (Encoding.ASCII.GetString(header) == "ERTM") needEncrypt = false;
+                bool needEncrypt = Encoding.ASCII.GetString(header) != "ERTM";
                 int count = br.ReadInt32();
 
                 int[] lens = new int[count];
@@ -211,23 +211,29 @@ namespace TTGVoxModifier
                 string[] names = new string[count];
                 uint[] vals = new uint[count];
 
-                /*for (int i = 0; i < count; i++)
-                {
-                    crcs[i] = br.ReadDouble();
-                    //byte[] tmp = br.ReadBytes(8);
-                    //tmp = br.ReadBytes(4);
-                    vals[i] = br.ReadUInt32();
-                }*/
+                bool isCRC = true;
 
-                for (int i = 0; i < count; i++)
+                int curr = (int)br.BaseStream.Position;
+                byte[] checkHeader = br.ReadBytes(16);
+
+                if((FindStartOfStringSomething(checkHeader, 0, "class") != -1) || (FindStartOfStringSomething(checkHeader, 0, "struct") != -1))
                 {
-                    lens[i] = br.ReadInt32();
-                    byte[] tmp = br.ReadBytes(lens[i]);
-                    names[i] = Encoding.ASCII.GetString(tmp);
-                    vals[i] = br.ReadUInt32();
-                    //int len = br.ReadInt32();
-                    //byte[] tmp = br.ReadBytes(len);
-                    //tmp = br.ReadBytes(4);
+                    for (int i = 0; i < count; i++)
+                    {
+                        lens[i] = br.ReadInt32();
+                        byte[] tmp = br.ReadBytes(lens[i]);
+                        names[i] = Encoding.ASCII.GetString(tmp);
+                        vals[i] = br.ReadUInt32();
+                        isCRC = false;
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < count; i++)
+                    {
+                        crcs[i] = br.ReadDouble();
+                        vals[i] = br.ReadUInt32();
+                    }
                 }
 
                 byte zero = br.ReadByte();
@@ -247,18 +253,10 @@ namespace TTGVoxModifier
                 noChnls = afr.WaveFormat.Channels;
                 int bitsPerSample = afr.WaveFormat.BitsPerSample;
                 int sampleRate = afr.WaveFormat.SampleRate;
-                //int sample = (int)afr.TotalTime.Milliseconds * sampleRate * noChnls / 1000;
                 time = (float)afr.TotalTime.TotalSeconds;
-                //float freqtest = (float)sampleRate / (float)sample;
                 byte[] data = new byte[afr.Length];
 
                 int bytesRead = afr.ToWaveProvider16().Read(data, 0, data.Length);
-                //int bytesRead = afr.Read(data, 0, data.Length);
-
-                //int sampleCount = data.Length * 8 / bitsPerSample;
-                //int sampleCount = bytesRead * 8 / bitsPerSample;
-                //int sampleCount = newData.Length / 2;
-
                 afr.Close();
 
                 unsafe
@@ -279,7 +277,6 @@ namespace TTGVoxModifier
 
                         case 16000:
                             nativeMode = noChnls == 2 ? SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband) : SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
-                            //nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
                             break;
 
                         case 32000:
@@ -288,9 +285,6 @@ namespace TTGVoxModifier
                             break;
                     }
 
-                    //SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
-                    //SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
-                    //SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Narrowband);
                     void* encState = Speex.EncoderInit(nativeMode);
                     
                     int encFrame, Enhance;
@@ -304,7 +298,6 @@ namespace TTGVoxModifier
 
                     int paddedLength = padSize(bytesRead / 2, encFrame);
                     short[] samples = new short[paddedLength];
-                    //short[] samples = new short[sampleCount];
                     int offt = 0;
 
                     for (int i = 0; i < paddedLength; i++)
@@ -316,8 +309,6 @@ namespace TTGVoxModifier
                     MemoryStream speexStream = new MemoryStream();
                     BinaryWriter bw = new BinaryWriter(speexStream);
 
-                    //List<int> offset = new List<int>();
-                    //blCount = (samples.Length / encFrame) / 2;
                     blCount = samples.Length / encFrame;
                     int[] offset = new int[blCount + 1];
                     int off = 0;
@@ -385,22 +376,27 @@ namespace TTGVoxModifier
                     tmp = BitConverter.GetBytes(count);
                     fs.Write(tmp, 0, tmp.Length);
 
-                    /*for (int i = 0; i < count; i++)
+                    if (isCRC)
                     {
-                        tmp = BitConverter.GetBytes(crcs[i]);
-                        fs.Write(tmp, 0, tmp.Length);
-                        tmp = BitConverter.GetBytes(vals[i]);
-                        fs.Write(tmp, 0, tmp.Length);
-                    }*/
-
-                    for(int i = 0; i < count; i++)
+                        for (int i = 0; i < count; i++)
+                        {
+                            tmp = BitConverter.GetBytes(crcs[i]);
+                            fs.Write(tmp, 0, tmp.Length);
+                            tmp = BitConverter.GetBytes(vals[i]);
+                            fs.Write(tmp, 0, tmp.Length);
+                        }
+                    }
+                    else
                     {
-                        tmp = BitConverter.GetBytes(lens[i]);
-                        fs.Write(tmp, 0, tmp.Length);
-                        tmp = Encoding.ASCII.GetBytes(names[i]);
-                        fs.Write(tmp, 0, tmp.Length);
-                        tmp = BitConverter.GetBytes(vals[i]);
-                        fs.Write(tmp, 0, tmp.Length);
+                        for (int i = 0; i < count; i++)
+                        {
+                            tmp = BitConverter.GetBytes(lens[i]);
+                            fs.Write(tmp, 0, tmp.Length);
+                            tmp = Encoding.ASCII.GetBytes(names[i]);
+                            fs.Write(tmp, 0, tmp.Length);
+                            tmp = BitConverter.GetBytes(vals[i]);
+                            fs.Write(tmp, 0, tmp.Length);
+                        }
                     }
 
                     tmp = new byte[1];
@@ -444,7 +440,6 @@ namespace TTGVoxModifier
 
         private void button1_Click(object sender, EventArgs e)
         {
-            bool needDecrypt = needDecryptCB.Checked;
             byte[] key = gamelist[gamelistCB.SelectedIndex].key;
 
             if (Directory.Exists(inputTB.Text) && Directory.Exists(outputTB.Text))
@@ -452,9 +447,13 @@ namespace TTGVoxModifier
                 DirectoryInfo di = new DirectoryInfo(inputTB.Text);
                 FileInfo[] fi = di.GetFiles("*.vox", SearchOption.TopDirectoryOnly);
 
+                progressBar1.Minimum = 0;
+                progressBar1.Maximum = fi.Length - 1;
+
                 for (int i = 0; i < fi.Length; i++)
                 {
-                    Unpack(fi[i], outputTB.Text, needDecrypt, key);
+                    Unpack(fi[i], outputTB.Text, key);
+                    progressBar1.Value = i;
                 }
             }
         }
@@ -503,7 +502,6 @@ namespace TTGVoxModifier
 
         private void button2_Click(object sender, EventArgs e)
         {
-            bool needDecrypt = needDecryptCB.Checked;
             byte[] key = gamelist[gamelistCB.SelectedIndex].key;
 
             if (Directory.Exists(inputTB.Text) && Directory.Exists(outputTB.Text))
@@ -511,12 +509,17 @@ namespace TTGVoxModifier
                 DirectoryInfo di = new DirectoryInfo(inputTB.Text);
                 FileInfo[] fi = di.GetFiles("*.vox", SearchOption.TopDirectoryOnly);
 
+                progressBar1.Minimum = 0;
+                progressBar1.Maximum = fi.Length - 1;
+
                 for (int i = 0; i < fi.Length; i++)
                 {
                     if (File.Exists(fi[i].FullName.Remove(fi[i].FullName.Length - 3, 3) + "wav"))
                     {
-                        Repack(fi[i], outputTB.Text, needDecrypt, key);
+                        Repack(fi[i], outputTB.Text, key);
                     }
+
+                    progressBar1.Value = i;
                 }
             }
         }
