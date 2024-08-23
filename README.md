@@ -2,7 +2,9 @@
 
 This tool need for extract and repack sound files from oldest games of Telltale games.
 
-Special thanks to SlimeNull for SpeexSharp: https://github.com/SlimeNull/SpeexSharp
+Special thanks:
+ - SlimeNull for SpeexSharp: https://github.com/SlimeNull/SpeexSharp
+ - Bennyboy for Telltale speech extractor: https://github.com/bgbennyboy
 
 
 ***
