@@ -49,6 +49,28 @@ namespace TTGVoxModifier
             }
         }
 
+        private int SearchBinText(byte[] block, string text)
+        {
+            for (int i = 0; i < block.Length; i++)
+            {
+                if(i + text.Length < block.Length)
+                {
+                    byte[] tmp = new byte[text.Length];
+                    Array.Copy(block, i, tmp, 0, tmp.Length);
+                    if (Encoding.ASCII.GetString(tmp) == text)
+                    {
+                        return i;
+                    }
+                }
+            }
+            return -1;
+        }
+
+        private bool ContainsString(byte[] bytes, string text)
+        {
+            return SearchBinText(bytes, text) != -1;
+        }
+
         private void Unpack(FileInfo fi, string outputFolder, byte[] key)
         {
             try
@@ -59,17 +81,25 @@ namespace TTGVoxModifier
                 bool needDecrypt = Encoding.ASCII.GetString(header) != "ERTM";
                 int count = br.ReadInt32();
 
-                /*for (int i = 0; i < count; i++)
-                {
-                    byte[] tmp = br.ReadBytes(8);
-                    tmp = br.ReadBytes(4);
-                }*/
+                byte[] check = br.ReadBytes(16);
+                br.BaseStream.Seek(8, SeekOrigin.Begin);
 
-                for (int i = 0; i < count; i++)
+                if(ContainsString(check, "class") || ContainsString(check, "struct"))
                 {
-                    int len = br.ReadInt32();
-                    byte[] tmp = br.ReadBytes(len);
-                    tmp = br.ReadBytes(4);
+                    for (int i = 0; i < count; i++)
+                    {
+                        int len = br.ReadInt32();
+                        byte[] tmp = br.ReadBytes(len);
+                        tmp = br.ReadBytes(4);
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < count; i++)
+                    {
+                        byte[] tmp = br.ReadBytes(8);
+                        tmp = br.ReadBytes(4);
+                    }
                 }
 
                 byte zero = br.ReadByte();
@@ -130,7 +160,7 @@ namespace TTGVoxModifier
                     {
                         byte[] bl = br.ReadBytes(blocks[i + 1] - blocks[i]);
 
-                        if ((i == 0) && (FindStartOfStringSomething(bl, 0, "Encoded with Speex") != -1))
+                        if ((i == 0) && ContainsString(bl, "Encoded with Speex"))
                         {
                             goto end;
                         }
@@ -216,7 +246,7 @@ namespace TTGVoxModifier
                 int curr = (int)br.BaseStream.Position;
                 byte[] checkHeader = br.ReadBytes(16);
 
-                if((FindStartOfStringSomething(checkHeader, 0, "class") != -1) || (FindStartOfStringSomething(checkHeader, 0, "struct") != -1))
+                if(ContainsString(checkHeader, "class") || ContainsString(checkHeader, "struct"))
                 {
                     for (int i = 0; i < count; i++)
                     {
@@ -442,6 +472,8 @@ namespace TTGVoxModifier
         {
             byte[] key = gamelist[gamelistCB.SelectedIndex].key;
 
+            if (listBox1.Items.Count > 0) listBox1.Items.Clear();
+
             if (Directory.Exists(inputTB.Text) && Directory.Exists(outputTB.Text))
             {
                 DirectoryInfo di = new DirectoryInfo(inputTB.Text);
@@ -481,28 +513,10 @@ namespace TTGVoxModifier
             { return "error"; }
         }
 
-        private int FindStartOfStringSomething(byte[] array, int offset, string string_something)
-        {
-            int poz = offset;
-            while (ConvertHexToString(array, poz, string_something.Length, 1251) != string_something)
-            {
-                poz++;
-                if (ConvertHexToString(array, poz, string_something.Length, 1251) == string_something)
-                {
-                    return poz;
-                }
-                if ((poz + string_something.Length + 1) > array.Length)
-                {
-                    break;
-                }
-            }
-
-            return -1;
-        }
-
         private void button2_Click(object sender, EventArgs e)
         {
             byte[] key = gamelist[gamelistCB.SelectedIndex].key;
+            if (listBox1.Items.Count > 0) listBox1.Items.Clear();
 
             if (Directory.Exists(inputTB.Text) && Directory.Exists(outputTB.Text))
             {
