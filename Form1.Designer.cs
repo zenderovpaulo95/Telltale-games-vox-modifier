@@ -152,7 +152,7 @@
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
-            ClientSize = new Size(691, 567);
+            ClientSize = new Size(685, 567);
             Controls.Add(progressBar1);
             Controls.Add(label1);
             Controls.Add(gamelistCB);
