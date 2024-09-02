@@ -157,7 +157,9 @@ namespace TTGVoxModifier
                         byte[] bl = br.ReadBytes(blocks[i + 1] - blocks[i]);
                         bls.Add(bl);
                     }
-                    
+
+                    FileStream tfs = new FileStream("test.bin", FileMode.CreateNew);
+
                     for (int i = 0; i < bls.Count(); i++)
                     {
                         if ((i == 0) && ContainsString(bls[i], "Encoded with Speex"))
@@ -170,6 +172,8 @@ namespace TTGVoxModifier
                             BlowFishCS.BlowFish decbl = new BlowFishCS.BlowFish(key, 2);
                             bls[i] = decbl.Crypt_ECB(bls[i], 2, true);
                         }
+
+                        tfs.Write(bls[i], 0, bls[i].Length);
 
                         Speex.BitsReset(&bits);
                         fixed (byte* b = bls[i])
@@ -199,6 +203,8 @@ namespace TTGVoxModifier
                     end:
                         int endbl = 0;
                     }
+
+                    tfs.Close();
 
                     Speex.DecoderDestroy(decState);
                     Speex.StereoStateDestroy(sss);
