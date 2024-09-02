@@ -122,27 +122,21 @@ namespace TTGVoxModifier
                 {
                     SpeexSharp.Native.SpeexBits bits;
                     Speex.BitsInit(&bits);
+                    if (noChnls == 2) freq /= 2;
 
                     SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Narrowband);
 
-                    switch(freq)
+                    switch(frameSize)
                     {
-                        case 16000:
-                            if (noChnls == 2) freq /= 2;
+                        case 640:
+                            nativeMode = noChnls == 2 ? SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband) : SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
                             break;
 
-                        case 32000:
-                            nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
-                            if (noChnls == 2)
-                            {
-                                freq /= 2;
-                                nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
-                            }
+                        case 1280:
+                            if (noChnls == 2) nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
                             break;
                     }
 
-                    //SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
-                    //SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
                     void* decState = Speex.DecoderInit(nativeMode);
                     int decFrame, Enhance;
                     Speex.DecoderCtl(decState, (int)GetCoderParameter.FrameSize, &decFrame);
@@ -156,11 +150,17 @@ namespace TTGVoxModifier
                         blocks[i] = br.ReadInt32();
                     }
 
+                    List<byte[]> bls = new List<byte[]>();
+
                     for (int i = 0; i + 1 < blCount; i++)
                     {
                         byte[] bl = br.ReadBytes(blocks[i + 1] - blocks[i]);
-
-                        if ((i == 0) && ContainsString(bl, "Encoded with Speex"))
+                        bls.Add(bl);
+                    }
+                    
+                    for (int i = 0; i < bls.Count(); i++)
+                    {
+                        if ((i == 0) && ContainsString(bls[i], "Encoded with Speex"))
                         {
                             goto end;
                         }
@@ -168,13 +168,12 @@ namespace TTGVoxModifier
                         if ((i % 64 == 0) && needDecrypt)
                         {
                             BlowFishCS.BlowFish decbl = new BlowFishCS.BlowFish(key, 2);
-                            bl = decbl.Crypt_ECB(bl, 2, true);
+                            bls[i] = decbl.Crypt_ECB(bls[i], 2, true);
                         }
 
                         Speex.BitsReset(&bits);
-                        fixed (byte* b = bl)
+                        fixed (byte* b = bls[i])
                         {
-                            //short[] vals = new short[decFrame * 2];
                             short[] vals = new short[decFrame];
 
                             if (noChnls == 2) vals = new short[decFrame * 2];
@@ -207,7 +206,6 @@ namespace TTGVoxModifier
 
                 byte[] result = ms.ToArray();
 
-                //NAudio.Wave.WaveFormat wavformat = new NAudio.Wave.WaveFormat(freq / 2, 16, noChnls);
                 NAudio.Wave.WaveFormat wavformat = new NAudio.Wave.WaveFormat(freq, 16, noChnls);
                 WaveFileWriter wfw = new WaveFileWriter(outputFolder + Path.DirectorySeparatorChar + fi.Name.Remove(fi.Name.Length - 3, 3) + "wav", wavformat);
                 wfw.Write(result, 0, result.Length);
@@ -294,24 +292,23 @@ namespace TTGVoxModifier
                     SpeexSharp.Native.SpeexBits bits;
                     Speex.BitsInit(&bits);
 
+                    //if (noChnls == 2) sampleRate *= 2;
+
                     SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Narrowband);
 
-                    switch (sampleRate)
+                    switch (frameSize)
                     {
-                        case 8000:
-                            if(noChnls == 2)
-                            {
-                                nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
-                            }
+                        case 320:
+                            nativeMode = noChnls == 2 ? SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Narrowband) : SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
                             break;
 
-                        case 16000:
-                            nativeMode = noChnls == 2 ? SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband) : SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
+                        case 640:
+                            nativeMode = noChnls == 2 ? SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband) : SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
                             break;
 
-                        case 32000:
-                            if (noChnls == 1) nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
-                            else throw new Exception("Please make either mono channel with 32000 samplerate or change samplerate to 16000");
+                        case 1280:
+                            if (noChnls == 2) nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
+                            else throw new Exception("Please make either mono channel with frame rate 1280 or change frame rate to 640");
                             break;
                     }
 
