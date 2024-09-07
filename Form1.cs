@@ -14,6 +14,7 @@ namespace TTGVoxModifier
     public partial class Form1 : Form
     {
         public delegate void ReportHandler(string report);
+        public delegate void ProgressHandler(int val);
 
         public Form1()
         {
@@ -46,6 +47,18 @@ namespace TTGVoxModifier
                 listBox1.Items.Add(report);
                 listBox1.SelectedIndex = listBox1.Items.Count - 1;
                 listBox1.SelectedIndex = -1;
+            }
+        }
+
+        void Progress(int i)
+        {
+            if (progressBar1.InvokeRequired)
+            {
+                progressBar1.Invoke(new ProgressHandler(Progress), i);
+            }
+            else
+            {
+                progressBar1.Value = i;
             }
         }
 
@@ -512,12 +525,13 @@ namespace TTGVoxModifier
                 FileInfo[] fi = di.GetFiles("*.vox", SearchOption.TopDirectoryOnly);
 
                 progressBar1.Minimum = 0;
-                progressBar1.Maximum = fi.Length - 1;
+                progressBar1.Maximum = fi.Length > 1 ? fi.Length - 1 : 1;
 
                 for (int i = 0; i < fi.Length; i++)
                 {
                     Unpack(fi[i], outputTB.Text, key, needDecrypt);
-                    progressBar1.Value = i;
+                    if (fi.Length > 1) Progress(i);
+                    else Progress(1);
                 }
             }
         }
@@ -557,7 +571,7 @@ namespace TTGVoxModifier
                 FileInfo[] fi = di.GetFiles("*.vox", SearchOption.TopDirectoryOnly);
 
                 progressBar1.Minimum = 0;
-                progressBar1.Maximum = fi.Length - 1;
+                progressBar1.Maximum = fi.Length > 1 ? fi.Length - 1 : 1;
 
                 for (int i = 0; i < fi.Length; i++)
                 {
@@ -566,7 +580,8 @@ namespace TTGVoxModifier
                         Repack(fi[i], outputTB.Text, key, needEncrypt);
                     }
 
-                    progressBar1.Value = i;
+                    if (fi.Length > 1) Progress(i);
+                    else Progress(1);
                 }
             }
         }
