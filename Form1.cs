@@ -71,14 +71,13 @@ namespace TTGVoxModifier
             return SearchBinText(bytes, text) != -1;
         }
 
-        private void Unpack(FileInfo fi, string outputFolder, byte[] key)
+        private void Unpack(FileInfo fi, string outputFolder, byte[] key, bool needDecrypt)
         {
             try
             {
                 FileStream fs = new FileStream(fi.FullName, FileMode.Open);
                 BinaryReader br = new BinaryReader(fs);
                 byte[] header = br.ReadBytes(4);
-                bool needDecrypt = Encoding.ASCII.GetString(header) != "ERTM";
                 int count = br.ReadInt32();
 
                 byte[] check = br.ReadBytes(16);
@@ -122,18 +121,21 @@ namespace TTGVoxModifier
                 {
                     SpeexSharp.Native.SpeexBits bits;
                     Speex.BitsInit(&bits);
-                    if (noChnls == 2) freq /= 2;
+                    //if (noChnls == 2) freq /= 2;
+                    
 
                     SpeexSharp.Native.SpeexMode* nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Narrowband);
 
                     switch(frameSize)
                     {
-                        case 640:
-                            nativeMode = noChnls == 2 ? SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband) : SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
+                        case 320:
+                            //nativeMode = noChnls == 2 ? SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Narrowband) : SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
+                            nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
                             break;
 
-                        case 1280:
-                            if (noChnls == 2) nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
+                        case 640:
+                            //nativeMode = noChnls == 2 ? SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband) : SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
+                            nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
                             break;
                     }
 
@@ -152,59 +154,63 @@ namespace TTGVoxModifier
 
                     List<byte[]> bls = new List<byte[]>();
 
-                    for (int i = 0; i + 1 < blCount; i++)
+                    for (int i = 0; i < blCount; i++)
                     {
-                        byte[] bl = br.ReadBytes(blocks[i + 1] - blocks[i]);
+                        byte[] bl = i + 1 == blCount ? br.ReadBytes((int)br.BaseStream.Length - blocks[i]) : br.ReadBytes(blocks[i + 1] - blocks[i]);
                         bls.Add(bl);
                     }
 
-                    FileStream tfs = new FileStream("test.bin", FileMode.CreateNew);
+                    //FileStream tfs = new FileStream("test.bin", FileMode.CreateNew);
 
                     for (int i = 0; i < bls.Count(); i++)
                     {
-                        if ((i == 0) && ContainsString(bls[i], "Encoded with Speex"))
-                        {
-                            goto end;
-                        }
+                        //tfs.Write(bls[i], 0, bls[i].Length);
 
-                        if ((i % 64 == 0) && needDecrypt)
+                        if (i % 64 == 0 && needDecrypt)
                         {
                             BlowFishCS.BlowFish decbl = new BlowFishCS.BlowFish(key, 2);
                             bls[i] = decbl.Crypt_ECB(bls[i], 2, true);
                         }
 
-                        tfs.Write(bls[i], 0, bls[i].Length);
+                        if ((i == 0) && ContainsString(bls[i], "Encoded with Speex"))
+                        {
+                            goto end;
+                        }
 
-                        Speex.BitsReset(&bits);
+                        int blSz = (int)bls[i].Length;
+
                         fixed (byte* b = bls[i])
                         {
-                            short[] vals = new short[decFrame];
+                            short[] vals = noChnls == 2 ? new short[decFrame * 2] : new short[decFrame];
 
-                            if (noChnls == 2) vals = new short[decFrame * 2];
-
-                            Speex.BitsReadFrom(&bits, b, vals.Length);
+                            Speex.BitsReset(&bits);
+                            //Speex.BitsReadFrom(&bits, b, vals.Length);
+                            Speex.BitsReadFrom(&bits, b, blSz);
                             int k = -1;
 
-                            do
-                            {
+                            //do
+                            //{
                                 fixed (short* v = vals)
                                 {
                                     k = Speex.DecodeInt(decState, &bits, &v[0]);
 
-                                    if (noChnls == 2) Speex.DecodeStereoInt(&v[0], decFrame, sss);
+                                    //if (k == 0)
+                                    //{
+                                        if (noChnls == 2) Speex.DecodeStereoInt(&v[0], decFrame, sss);
 
-                                    Span<byte> res = MemoryMarshal.Cast<short, byte>(vals);
+                                        Span<byte> res = MemoryMarshal.Cast<short, byte>(vals);
 
-                                    bwms.Write(res);
+                                        bwms.Write(res);
+                                    //}
                                 }
-                            } while (k != 0);
+                            //} while (k != 0);
                         }
 
                     end:
-                        int endbl = 0;
+                        int skip = 1;
                     }
 
-                    tfs.Close();
+                    //tfs.Close();
 
                     Speex.DecoderDestroy(decState);
                     Speex.StereoStateDestroy(sss);
@@ -230,14 +236,14 @@ namespace TTGVoxModifier
             }
         }
 
-        private void Repack(FileInfo inputFI, string outputFile, byte[] key)
+        private void Repack(FileInfo inputFI, string outputFile, byte[] key, bool needEncrypt)
         {
             try
             {
                 FileStream fs = new FileStream(inputFI.FullName, FileMode.Open);
                 BinaryReader br = new BinaryReader(fs);
                 byte[] header = br.ReadBytes(4);
-                bool needEncrypt = Encoding.ASCII.GetString(header) != "ERTM";
+                //bool needEncrypt = Encoding.ASCII.GetString(header) != "ERTM";
                 int count = br.ReadInt32();
 
                 int[] lens = new int[count];
@@ -249,6 +255,7 @@ namespace TTGVoxModifier
 
                 int curr = (int)br.BaseStream.Position;
                 byte[] checkHeader = br.ReadBytes(16);
+                br.BaseStream.Seek(curr, SeekOrigin.Begin);
 
                 if(ContainsString(checkHeader, "class") || ContainsString(checkHeader, "struct"))
                 {
@@ -305,31 +312,29 @@ namespace TTGVoxModifier
                     switch (frameSize)
                     {
                         case 320:
-                            nativeMode = noChnls == 2 ? SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Narrowband) : SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
+                            //nativeMode = noChnls == 2 ? SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Narrowband) : SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
+                            nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband);
                             break;
 
                         case 640:
-                            nativeMode = noChnls == 2 ? SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband) : SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
-                            break;
-
-                        case 1280:
-                            if (noChnls == 2) nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
-                            else throw new Exception("Please make either mono channel with frame rate 1280 or change frame rate to 640");
+                            //nativeMode = noChnls == 2 ? SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.Wideband) : SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
+                            nativeMode = SpeexUtils.GetNativeMode(SpeexSharp.SpeexMode.UltraWideband);
                             break;
                     }
 
                     void* encState = Speex.EncoderInit(nativeMode);
-                    
+
                     int encFrame, Enhance;
                     Speex.EncoderCtl(encState, (int)GetCoderParameter.FrameSize, &encFrame);
                     Enhance = 1;
                     Speex.EncoderCtl(encState, (int)SetCoderParameter.Enh, &Enhance);
-                    int smpRate;
-                    int quality = 7;
-                    Speex.EncoderCtl(encState, (int)GetCoderParameter.SamplingRate, &smpRate);
+                    Speex.EncoderCtl(encState, (int)SetCoderParameter.SamplingRate, &sampleRate);
+                    int quality = 5;
+                    //Speex.EncoderCtl(encState, (int)GetCoderParameter.SamplingRate, &smpRate);
                     Speex.EncoderCtl(encState, (int)SetCoderParameter.Quality, &quality);
 
                     int paddedLength = padSize(bytesRead / 2, encFrame);
+                    //int paddedLength = padSize(bytesRead / 2, frameSize);
                     short[] samples = new short[paddedLength];
                     int offt = 0;
 
@@ -345,16 +350,31 @@ namespace TTGVoxModifier
                     blCount = samples.Length / encFrame;
                     int[] offset = new int[blCount + 1];
                     int off = 0;
-                    offset[0] = off;
-                    string text = "Encoded with Speex via SpeexSharp";
-                    int len = Encoding.ASCII.GetBytes(text).Length;
-                    byte[] tmp = BitConverter.GetBytes(len);
-                    bw.Write(tmp);
-                    tmp = Encoding.ASCII.GetBytes(text);
-                    off += 4;
-                    bw.Write(tmp);
-                    off += len;
                     int encOff = 0;
+                    byte[] tmp;
+
+                    using (MemoryStream msw = new MemoryStream())
+                    {
+                        offset[0] = off;
+                        string text = "Encoded with Speex via SpeexSharp";
+                        int len = Encoding.ASCII.GetBytes(text).Length;
+                        tmp = BitConverter.GetBytes(len);
+                        msw.Write(tmp);
+                        tmp = Encoding.ASCII.GetBytes(text);
+                        off += 4;
+                        msw.Write(tmp);
+                        off += len;
+
+                        tmp = msw.ToArray();
+
+                        if (needEncrypt)
+                        {
+                            BlowFishCS.BlowFish encbl = new BlowFishCS.BlowFish(key, 2);
+                            tmp = encbl.Crypt_ECB(tmp, 2, false);
+                        }
+
+                        bw.Write(tmp);
+                    }
 
                     // encode
                     for (int i = 1; i < blCount; i++)
@@ -393,6 +413,9 @@ namespace TTGVoxModifier
                             bw.Write(tmp);
                             encOff += encFrame;
                         }
+
+                    end:
+                        int skip = 1;
                     }
 
                     byte[] t = speexStream.ToArray();
@@ -440,9 +463,14 @@ namespace TTGVoxModifier
                     fs.Write(tmp, 0, tmp.Length);
                     tmp = BitConverter.GetBytes(dataSize);
                     fs.Write(tmp, 0, tmp.Length);
-                    tmp = BitConverter.GetBytes(encFrame);
+                    //if (noChnls == 2) encFrame *= 2;
+                    //tmp = BitConverter.GetBytes(encFrame);
+                    tmp = BitConverter.GetBytes(frameSize);
                     fs.Write(tmp, 0, tmp.Length);
-                    tmp = BitConverter.GetBytes(smpRate);
+                    if (noChnls == 2) sampleRate *= 2;
+                    tmp = BitConverter.GetBytes(sampleRate);
+                    //if (noChnls == 2) smpRate *= 2;
+                    //tmp = BitConverter.GetBytes(smpRate);
                     fs.Write(tmp, 0, tmp.Length);
                     tmp = BitConverter.GetBytes(noChnls);
                     fs.Write(tmp, 0, tmp.Length);
@@ -474,6 +502,7 @@ namespace TTGVoxModifier
         private void button1_Click(object sender, EventArgs e)
         {
             byte[] key = gamelist[gamelistCB.SelectedIndex].key;
+            bool needDecrypt = cryptCheckBox.Checked;
 
             if (listBox1.Items.Count > 0) listBox1.Items.Clear();
 
@@ -487,7 +516,7 @@ namespace TTGVoxModifier
 
                 for (int i = 0; i < fi.Length; i++)
                 {
-                    Unpack(fi[i], outputTB.Text, key);
+                    Unpack(fi[i], outputTB.Text, key, needDecrypt);
                     progressBar1.Value = i;
                 }
             }
@@ -519,6 +548,7 @@ namespace TTGVoxModifier
         private void button2_Click(object sender, EventArgs e)
         {
             byte[] key = gamelist[gamelistCB.SelectedIndex].key;
+            bool needEncrypt = cryptCheckBox.Checked;
             if (listBox1.Items.Count > 0) listBox1.Items.Clear();
 
             if (Directory.Exists(inputTB.Text) && Directory.Exists(outputTB.Text))
@@ -533,7 +563,7 @@ namespace TTGVoxModifier
                 {
                     if (File.Exists(fi[i].FullName.Remove(fi[i].FullName.Length - 3, 3) + "wav"))
                     {
-                        Repack(fi[i], outputTB.Text, key);
+                        Repack(fi[i], outputTB.Text, key, needEncrypt);
                     }
 
                     progressBar1.Value = i;

@@ -40,6 +40,7 @@
             gamelistCB = new ComboBox();
             label1 = new Label();
             progressBar1 = new ProgressBar();
+            cryptCheckBox = new CheckBox();
             SuspendLayout();
             // 
             // exportBtn
@@ -148,11 +149,22 @@
             progressBar1.Size = new Size(633, 23);
             progressBar1.TabIndex = 11;
             // 
+            // cryptCheckBox
+            // 
+            cryptCheckBox.AutoSize = true;
+            cryptCheckBox.Location = new Point(471, 190);
+            cryptCheckBox.Name = "cryptCheckBox";
+            cryptCheckBox.Size = new Size(159, 19);
+            cryptCheckBox.TabIndex = 12;
+            cryptCheckBox.Text = "Need decrypt or encrypt?";
+            cryptCheckBox.UseVisualStyleBackColor = true;
+            // 
             // Form1
             // 
             AutoScaleDimensions = new SizeF(7F, 15F);
             AutoScaleMode = AutoScaleMode.Font;
             ClientSize = new Size(685, 567);
+            Controls.Add(cryptCheckBox);
             Controls.Add(progressBar1);
             Controls.Add(label1);
             Controls.Add(gamelistCB);
@@ -187,5 +199,6 @@
         private ComboBox gamelistCB;
         private Label label1;
         private ProgressBar progressBar1;
+        private CheckBox cryptCheckBox;
     }
 }
