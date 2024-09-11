@@ -115,6 +115,12 @@ namespace TTGVoxModifier
                 }
 
                 byte zero = br.ReadByte();
+
+                if(zero != 0x30)
+                {
+                    br.BaseStream.Seek(-1, SeekOrigin.Current);
+                }
+
                 float time = br.ReadSingle();
                 int dataSize = br.ReadInt32();
                 int frameSize = br.ReadInt32();
@@ -270,6 +276,8 @@ namespace TTGVoxModifier
                 byte[] checkHeader = br.ReadBytes(16);
                 br.BaseStream.Seek(curr, SeekOrigin.Begin);
 
+                bool hasByteVal = true;
+
                 if(ContainsString(checkHeader, "class") || ContainsString(checkHeader, "struct"))
                 {
                     for (int i = 0; i < count; i++)
@@ -290,7 +298,15 @@ namespace TTGVoxModifier
                     }
                 }
 
+                int pos = (int)br.BaseStream.Position;
                 byte zero = br.ReadByte();
+
+                if (zero != 0x30)
+                {
+                    hasByteVal = false;
+                    br.BaseStream.Seek(-1, SeekOrigin.Current);
+                }
+
                 float time = br.ReadSingle();
                 int dataSize = br.ReadInt32();
                 int frameSize = br.ReadInt32();
@@ -468,9 +484,12 @@ namespace TTGVoxModifier
                         }
                     }
 
-                    tmp = new byte[1];
-                    tmp[0] = zero;
-                    fs.Write(tmp, 0, tmp.Length);
+                    if (hasByteVal)
+                    {
+                        tmp = new byte[1];
+                        tmp[0] = zero;
+                        fs.Write(tmp, 0, tmp.Length);
+                    }
 
                     tmp = BitConverter.GetBytes(time);
                     fs.Write(tmp, 0, tmp.Length);
