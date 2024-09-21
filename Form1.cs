@@ -116,7 +116,7 @@ namespace TTGVoxModifier
 
                 byte zero = br.ReadByte();
 
-                if(zero != 0x30)
+                if((zero != 0x30) && (zero != 0x31))
                 {
                     br.BaseStream.Seek(-1, SeekOrigin.Current);
                 }
@@ -301,7 +301,7 @@ namespace TTGVoxModifier
                 int pos = (int)br.BaseStream.Position;
                 byte zero = br.ReadByte();
 
-                if (zero != 0x30)
+                if (zero != 0x30 && zero != 0x31)
                 {
                     hasByteVal = false;
                     br.BaseStream.Seek(-1, SeekOrigin.Current);
