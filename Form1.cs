@@ -8,6 +8,7 @@ using System.IO;
 using System.Windows.Forms;
 using System.Drawing.Imaging;
 using System.Net.Http.Headers;
+using System.Resources;
 
 namespace TTGVoxModifier
 {
@@ -96,6 +97,8 @@ namespace TTGVoxModifier
                 byte[] check = br.ReadBytes(16);
                 br.BaseStream.Seek(8, SeekOrigin.Begin);
 
+                int retPos = 8;
+
                 if(ContainsString(check, "class") || ContainsString(check, "struct"))
                 {
                     for (int i = 0; i < count; i++)
@@ -103,6 +106,7 @@ namespace TTGVoxModifier
                         int len = br.ReadInt32();
                         byte[] tmp = br.ReadBytes(len);
                         tmp = br.ReadBytes(4);
+                        retPos += 4 + len + 4;
                     }
                 }
                 else
@@ -111,6 +115,7 @@ namespace TTGVoxModifier
                     {
                         byte[] tmp = br.ReadBytes(8);
                         tmp = br.ReadBytes(4);
+                        retPos += 12;
                     }
                 }
 
@@ -121,6 +126,7 @@ namespace TTGVoxModifier
                     br.BaseStream.Seek(-1, SeekOrigin.Current);
                 }
 
+                reread:
                 float time = br.ReadSingle();
                 int dataSize = br.ReadInt32();
                 int frameSize = br.ReadInt32();
@@ -128,6 +134,13 @@ namespace TTGVoxModifier
                 int noChnls = br.ReadInt32();
                 int blSize = br.ReadInt32();
                 int blCount = br.ReadInt32();
+
+                //Check if block size is correct and try read again
+                if (fs.Length - (int)fs.Position - (4 * blCount) != dataSize)
+                {
+                    br.BaseStream.Seek(retPos, SeekOrigin.Begin);
+                    goto reread;
+                }
 
                 int[] blocks = new int[blCount];
 
@@ -266,7 +279,7 @@ namespace TTGVoxModifier
                 int count = br.ReadInt32();
 
                 int[] lens = new int[count];
-                double[] crcs = new double[count];
+                ulong[] crcs = new ulong[count];
                 string[] names = new string[count];
                 uint[] vals = new uint[count];
 
@@ -293,7 +306,7 @@ namespace TTGVoxModifier
                 {
                     for (int i = 0; i < count; i++)
                     {
-                        crcs[i] = br.ReadDouble();
+                        crcs[i] = br.ReadUInt64();
                         vals[i] = br.ReadUInt32();
                     }
                 }
@@ -307,6 +320,7 @@ namespace TTGVoxModifier
                     br.BaseStream.Seek(-1, SeekOrigin.Current);
                 }
 
+                reread:
                 float time = br.ReadSingle();
                 int dataSize = br.ReadInt32();
                 int frameSize = br.ReadInt32();
@@ -314,6 +328,14 @@ namespace TTGVoxModifier
                 int noChnls = br.ReadInt32();
                 int blSize = br.ReadInt32();
                 int blCount = br.ReadInt32();
+
+                //Check if block size is correct and try read again
+                if (fs.Length - (int)fs.Position - (4 * blCount) != dataSize)
+                {
+                    br.BaseStream.Seek(pos, SeekOrigin.Begin);
+                    hasByteVal = false;
+                    goto reread;
+                }
 
                 br.Close();
                 fs.Close();
@@ -385,14 +407,10 @@ namespace TTGVoxModifier
                     using (MemoryStream msw = new MemoryStream())
                     {
                         offset[0] = off;
-                        string text = "Encoded with Speex via SpeexSharp";
-                        int len = Encoding.ASCII.GetBytes(text).Length;
-                        tmp = BitConverter.GetBytes(len);
+                        //First block "Encoded with Speex speex-1.0.4"
+                        tmp = new byte[]{ 0x1E, 0x00, 0x00, 0x00, 0x45, 0x6E, 0x63, 0x6F, 0x64, 0x65, 0x64, 0x20, 0x77, 0x69, 0x74, 0x68, 0x20, 0x53, 0x70, 0x65, 0x65, 0x78, 0x20, 0x73, 0x70, 0x65, 0x65, 0x78, 0x2D, 0x31, 0x2E, 0x30, 0x2E, 0x34, 0x00, 0x00, 0x00, 0x00 };
                         msw.Write(tmp);
-                        tmp = Encoding.ASCII.GetBytes(text);
-                        off += 4;
-                        msw.Write(tmp);
-                        off += len;
+                        off += tmp.Length;
 
                         tmp = msw.ToArray();
 
