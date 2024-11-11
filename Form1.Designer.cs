@@ -179,7 +179,8 @@
             Controls.Add(exportBtn);
             MaximizeBox = false;
             Name = "Form1";
-            Text = "Telltale's vox modifier";
+            Text = "Telltale's vox modifier v1.08";
+            FormClosing += Form1_FormClosing;
             Load += Form1_Load;
             ResumeLayout(false);
             PerformLayout();
